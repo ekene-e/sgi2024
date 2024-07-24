@@ -128,7 +128,20 @@ void Process( void )
 			// .. Check that the point is inside the unit-interval
 			// .. If it is, add the point (in world coordinates) along with the indices of the two functions generating it to "vertices"
 			///////////////////////
-
+			for (unsigned int i = 0; i < N; i++)
+				{
+					for (unsigned int j = i + 1; j < N; j++)
+					{
+						double t = (grid(e[0])[i] - grid(e[1])[i]) / ((grid(e[0])[i] - grid(e[1])[i]) + (grid(e[1])[j] - grid(e[0])[j]));
+						if (t >= 0 && t <= 1)
+						{
+							Point<double, Dim> p;
+							for (unsigned int d = 0; d < Dim; d++) p[d] = e[0][d] * (1. - t) + e[1][d] * t;
+							vertices.emplace_back(mi, (unsigned int)levelSetVertices.size());
+							levelSetVertices.push_back(p);
+						}
+					}
+				}
 			edgeVertexMap[ mi ] = vertices;
 			return mi;
 		};
@@ -150,7 +163,29 @@ void Process( void )
 			// .. Check that the point is inside the unit-right-triangle
 			// .. If it is, add the point (in world coordinates) along with the indices of the three functions generating it to "vertices"
 			///////////////////////
+			for (unsigned int i = 0; i < N; i++)
+			{
+				for (unsigned int j = i + 1; j < N; j++)
+				{
+					for (unsigned int k = j + 1; k < N; k++)
+					{
+						Eigen::Matrix<double, 2, 2> A;
+						A << grid(t[1])[i] - grid(t[0])[i], grid(t[2])[i] - grid(t[0])[i],
+							 grid(t[1])[j] - grid(t[0])[j], grid(t[2])[j] - grid(t[0])[j];
+						Eigen::Vector2d b(grid(t[0])[i] - grid(t[0])[j], grid(t[0])[k] - grid(t[0])[i]);
 
+						Eigen::Vector2d x = A.colPivHouseholderQr().solve(b);
+
+						if (x[0] >= 0 && x[1] >= 0 && x[0] + x[1] <= 1)
+						{
+							Point<double, Dim> p;
+							for (unsigned int d = 0; d < Dim; d++) p[d] = t[0][d] * (1. - x[0] - x[1]) + t[1][d] * x[0] + t[2][d] * x[1];
+							vertices.emplace_back(mi, (unsigned int)levelSetVertices.size());
+							levelSetVertices.push_back(p);
+						}
+					}
+				}
+			}
 			triangleVertexMap[ mi ] = vertices;
 			return mi;
 		};
@@ -194,7 +229,39 @@ void Process( void )
 			// .. Connect the vertices labeled with the two function's indices into an edge
 			// .. Add the edge "levelSetEdges"
 			///////////////////////
+			for (unsigned int i = 0; i < N; i++)
+			{
+				for (unsigned int j = i + 1; j < N; j++)
+				{
+					std::vector<std::pair<MultiIndex<Dim+1>, unsigned int>> combinedVertices;
 
+					for (auto &edge : edgeVertices)
+					{
+						for (auto &vertex : edge->second)
+						{
+							if (vertex.first.contains(i) && vertex.first.contains(j))
+								combinedVertices.push_back(vertex);
+						}
+					}
+
+					for (auto &vertex : triangleVertices->second)
+					{
+						if (vertex.first.contains(i) && vertex.first.contains(j))
+							combinedVertices.push_back(vertex);
+					}
+
+					for (unsigned int k = 0; k < combinedVertices.size(); k++)
+					{
+						for (unsigned int l = k + 1; l < combinedVertices.size(); l++)
+						{
+							SimplexIndex<Dim-1> edge;
+							edge[0] = combinedVertices[k].second;
+							edge[1] = combinedVertices[l].second;
+							levelSetEdges.push_back(edge);
+						}
+					}
+				}
+			}
 		};
 
 	// Functionality for adding the level-set associated with a cell
